@@ -82,7 +82,7 @@
             var source = Y.one("#column1");
             var children = source.get("children");
             //todo: start parsing children and put into dest column
-            if (source.hasChildNodes()) {
+            if (children.size() > 0) {
 
                 var testPnl = createPanel(Y);
                 decendancyLevel ++;
@@ -129,17 +129,19 @@
             pgNum.setStyle("zIndex", 100);
             pnl.appendChild(pgNum);
 
+            testPnl.setAttribute("rootParent", true);
+
             return testPnl;
         }
 
         function fillPanel(Y, maxHeight, rootParent, currentNode, source) {
-            if (currentNode != rootParent) {
+            if (!currentNode.getAttribute("rootParent")) {
                 parentsArray.push(currentNode.cloneNode(false));
             }
             var cachedCurrentNode = currentNode;
 
             var children = source.get("children");
-            if (source.hasChildNodes()) {
+            if (children.size() > 0) {
                 var currentChild;
                 for (var i = 0; i < children.size(); i ++) {
                     if (!currentChild) {
@@ -149,12 +151,16 @@
                     }
                     var child = currentChild.cloneNode(true);
                     currentNode.appendChild(child);
+                    var childHeight = child.get("offsetHeight");
 
                     if (rootParent.get("offsetHeight") > maxHeight) {
                         currentNode.removeChild(child);
 
                         var panelHeight = rootParent.get("offsetHeight");
-                        if (maxHeight - panelHeight < 20) {
+                        var onePercent = maxHeight / 100;
+                        var panelPercentage = panelHeight / onePercent;
+//                        if (maxHeight - panelHeight < 20) {
+                        if (panelPercentage >= 90) {
 //                            console.debug(parentsArray);
                             rootParent = createPanel(Y);
                             var rp = rootParent;
@@ -164,9 +170,12 @@
                                 rp.appendChild(prnt);
                                 rp = prnt;
                             }
-
-                            currentNode = currentNode.cloneNode(false);
-                            rp.appendChild(currentNode);
+                            if (currentNode.getAttribute("rootParent")) {
+                                currentNode = rp;
+                            } else {
+                                currentNode = currentNode.cloneNode(false);
+                                rp.appendChild(currentNode);
+                            }
 
                             currentNode.appendChild(child);
                             if (rootParent.get("offsetHeight") > maxHeight) {
@@ -175,32 +184,96 @@
                                     var container = child.cloneNode(false);
                                     currentNode.appendChild(container);
                                     decendancyLevel ++;
-                                    rootParent = fillPanel(Y, maxHeight, rootParent, container, child);
+                                    var res = fillPanel(Y, maxHeight, rootParent, container, child);
+                                    rootParent = res[0];
+                                    currentNode = res[1];
+
                                     //todo: fill from parentsArray
+                                    var rp = rootParent;
+
+                                    for (var j = 0; j < parentsArray.length; j ++) {
+                                        var prnt = parentsArray[j].cloneNode(false);
+                                        rp.appendChild(prnt);
+                                        rp = prnt;
+                                    }
+                                    currentNode = rp;
                                     decendancyLevel --;
                                 } else {
                                     console.debug("decendancyLevel: " + decendancyLevel + " imploement !!!!!!!!!!!!!!!!");
                                 }
                             }
                         } else {
-                            if (child.hasChildNodes()) {
-                                var container = child.cloneNode(false);
-                                currentNode.appendChild(container);
-                                decendancyLevel ++;
-                                rootParent = fillPanel(Y, maxHeight, rootParent, container, child);
-                                //todo: fill from parentsArray
-                                decendancyLevel --;
+                            if (childHeight < maxHeight) {
+                                //todo: create new panel and put child into
+                                rootParent = createPanel(Y);
+                                var rp = rootParent;
+
+                                for (var j = 0; j < parentsArray.length; j ++) {
+                                    var prnt = parentsArray[j].cloneNode(false);
+                                    rp.appendChild(prnt);
+                                    rp = prnt;
+                                }
+//                                console.debug("2. " + currentNode.getAttribute("rootParent"));
+                                if (currentNode.getAttribute("rootParent")) {
+                                    currentNode = rp;
+                                } else {
+                                    currentNode = currentNode.cloneNode(false);
+                                    rp.appendChild(currentNode);
+                                }
+//                                currentNode = currentNode.cloneNode(false);
+//                                rp.appendChild(currentNode);
+
+                                currentNode.appendChild(child);
                             } else {
-                                console.debug("decendancyLevel: " + decendancyLevel + " imploement !!!!!!!!!!!!!!!!");
+                                if (child.hasChildNodes()) {
+                                    var container = child.cloneNode(false);
+                                    currentNode.appendChild(container);
+                                    decendancyLevel ++;
+                                    var res = fillPanel(Y, maxHeight, rootParent, container, child);
+                                    rootParent = res[0];
+                                    currentNode = res[1];
+                                    //todo: fill from parentsArray
+                                    var rp = rootParent;
+
+                                    for (var j = 0; j < parentsArray.length; j ++) {
+                                        var prnt = parentsArray[j].cloneNode(false);
+                                        rp.appendChild(prnt);
+                                        rp = prnt;
+                                    }
+                                    currentNode = rp;
+                                    decendancyLevel --;
+                                } else {
+                                    console.debug("decendancyLevel: " + decendancyLevel + " imploement !!!!!!!!!!!!!!!!");
+                                }
                             }
                         }
                     }
                 }
             } else {
-                console.debug("decendancyLevel: " + decendancyLevel + " IMPLEMENT text splitting");
+                //todo: operate with source object
+                rootParent = createPanel(Y);
+                var rp = rootParent;
+
+                for (var j = 0; j < parentsArray.length; j ++) {
+                    var prnt = parentsArray[j].cloneNode(false);
+                    rp.appendChild(prnt);
+                    rp = prnt;
+                }
+                console.debug("3. " + currentNode.getAttribute("rootParent"));
+                currentNode = currentNode.cloneNode(false);
+                rp.appendChild(currentNode);
+
+                currentNode.appendChild(source);
+
+                if (rootParent.get("offsetHeight") > maxHeight) {
+                    //todo: PROVIDE TEXT SPLITTING HERE
+                    currentNode.removeChild(source);
+                    console.debug("decendancyLevel: " + decendancyLevel + " IMPLEMENT text splitting");
+                }
+
             }
-            parentsArray.pop();
-            return rootParent;
+            var cn = parentsArray.pop();
+            return [rootParent, cn];
         }
 
 
