@@ -47,6 +47,10 @@
             overflow:  hidden;
         }
 
+        .page-item {
+            border: 1px solid #dddddd;
+        }
+
 
         #leftNav, #rightNav {
             cursor: pointer;
@@ -57,11 +61,18 @@
             display: none;
             border: 1px solid blue;
         }
+
+        #hiddenPagesContainer {
+            position: absolute;
+            visibility: hidden;
+            top: -10000px;
+            left: -10000px;
+        }
     </style>
 
     <script type="text/javascript">
         var currentShift = 0;
-        var currentPage = 1;
+        var currentPage = 2;
         var currentContentWidth, readerWidth;
 
         var decendancyLevel = 0;
@@ -73,7 +84,70 @@
             resizeReader(Y);
 
             buildPages(Y);
+
+            registerHandlers(Y);
+
+            Y.on("windowresize", function() {
+                resizeReader(Y);
+                setTimeout(function() {
+                    //make second resize to correct size of the book container to fit the screen size without scrollers
+                    resizeReader(Y);
+
+                    //remove previously created pages
+                    var pagesContainer = Y.one("#hiddenPagesContainer");
+                    pagesContainer.set("innerHTML", "");
+                    //reset some variables used for pages building
+                    panelIterator = 0;
+                    decendancyLevel = 0;
+                    parentsArray = new Array();
+                    currentPage = 2; //perhaps some sophisticated behavior will be provided later to calculate approximate current page after resizing...
+                    buildPages(Y);
+                }, 1);
+            })
         });
+
+        function registerHandlers(Y) {
+            var lNav = Y.one("#leftNav");
+            var rNav = Y.one("#rightNav");
+
+            lNav.on("click", function() {
+                if (currentPage > 2) {
+                    currentPage -= 2;
+                    showPages(Y);
+                }
+            });
+
+            rNav.on("click", function() {
+                if (currentPage < panelIterator) {
+                    currentPage += 2;
+                    showPages(Y);
+                }
+            })
+        }
+
+        function showPages(Y) {
+            var inner = Y.one("#innerContentContainer");
+                //show first 2 pages
+
+            inner.set("innerHTML", "");
+
+            var pg1 = Y.one("#pageId_" + (currentPage - 1));
+
+            pg1.setStyle("left", 0);
+            pg1.setStyle("top", 0);
+
+            pg1 = pg1.cloneNode(true);
+            inner.appendChild(pg1);
+
+            var pg2 = Y.one("#pageId_" + currentPage);
+            if (pg2) {
+                pg2.setStyle("right", 0);
+                pg2.setStyle("top", 0);
+
+                pg2 = pg2.cloneNode(true);
+                inner.appendChild(pg2);
+            }
+        }
 
         function buildPages(Y) {
             var inner = Y.one("#innerContentContainer");
@@ -88,6 +162,8 @@
                 decendancyLevel ++;
                 fillPanel(Y, panelHeight, testPnl, testPnl, source);
                 decendancyLevel --;
+
+                showPages(Y);
             } else {
                 //put a content into column
                 console.debug("decendancyLevel: " + decendancyLevel);
@@ -103,21 +179,23 @@
             pnl = Y.one(pnl);
             pnl.setStyle("width", panelWidth + "px");
             pnl.setStyle("height", panelHeight + "px");
-            pnl.setStyle("border", "1px solid black");
+//            pnl.setStyle("border", "1px solid black");
             pnl.setStyle("position", "absolute");
+
             var left = panelIterator * panelWidth;
             panelIterator ++;
-            pnl.setStyle("left", left + "px"); //for visualization
-            pnl.setStyle("top", "20px");
-            var body = Y.all("body");
-            body.appendChild(pnl);
+//            pnl.setStyle("left", left + "px"); //for visualization
+//            pnl.setStyle("top", "0px");
+            var pgContainer = Y.one("#hiddenPagesContainer");
+            pgContainer.appendChild(pnl);
 
             var testPnl = document.createElement("div");
             testPnl = Y.one(testPnl);
-            testPnl.setStyle("backgroundColor", "yellow");
-            testPnl.setStyle("border", "1px solid red");
-            testPnl.set("id", "panelId_" + panelIterator);
+//            testPnl.setStyle("backgroundColor", "yellow");
+//            testPnl.setStyle("border", "1px solid white");
+            testPnl.set("className", "page-item");
 
+            pnl.set("id", "pageId_" + panelIterator);
             pnl.appendChild(testPnl);
 
 
@@ -159,9 +237,7 @@
                         var panelHeight = rootParent.get("offsetHeight");
                         var onePercent = maxHeight / 100;
                         var panelPercentage = panelHeight / onePercent;
-//                        if (maxHeight - panelHeight < 20) {
                         if (panelPercentage >= 90) {
-//                            console.debug(parentsArray);
                             rootParent = createPanel(Y);
                             var rp = rootParent;
 
@@ -213,7 +289,6 @@
                                     rp.appendChild(prnt);
                                     rp = prnt;
                                 }
-//                                console.debug("2. " + currentNode.getAttribute("rootParent"));
                                 if (currentNode.getAttribute("rootParent")) {
                                     currentNode = rp;
                                 } else {
@@ -259,7 +334,6 @@
                     rp.appendChild(prnt);
                     rp = prnt;
                 }
-                console.debug("3. " + currentNode.getAttribute("rootParent"));
                 currentNode = currentNode.cloneNode(false);
                 rp.appendChild(currentNode);
 
@@ -311,6 +385,9 @@
     </script>
 </head>
 <body>
+<div id="hiddenPagesContainer">
+
+</div>
 <div id="container">
     <div style="background-color: #00AEFF;" id="header">some header</div>
 
