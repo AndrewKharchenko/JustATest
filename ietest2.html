@@ -58,8 +58,10 @@
 
         #column1, #column2 {
             position: absolute;
-            display: none;
+            visibility: hidden;
             border: 1px solid blue;
+            left: -99999px;
+            top: -99999px;
         }
 
         #hiddenPagesContainer {
@@ -78,8 +80,14 @@
         var decendancyLevel = 0;
         var panelIterator = 0;
         var parentsArray = new Array();
+        var _panelHeight = 0, _panelWidth = 0;
+        var imageLoaded = false;
+        var imagesSizes = new Array();
+
 
         YUI().use("node", "event", function(Y) {
+
+            determineImagesSizes(Y);
 
             resizeReader(Y);
 
@@ -87,24 +95,79 @@
 
             registerHandlers(Y);
 
-            Y.on("windowresize", function() {
-                resizeReader(Y);
-                setTimeout(function() {
-                    //make second resize to correct size of the book container to fit the screen size without scrollers
-                    resizeReader(Y);
+            if (Y.UA.ie) {
+                window.onresize = function() {
+                    if (document.ieResizeTimeout) {
+                        clearTimeout(document.ieResizeTimeout);
+                    }
+                    //it is needed to not perform a resize in ie while resize is not complete by user (performance)
+                    document.ieResizeTimeout = setTimeout(function() {
+                        setTimeout(function() {
+                            //make second resize to correct size of the book container to fit the screen size without scrollers
+                            resizeReader(Y);
 
-                    //remove previously created pages
-                    var pagesContainer = Y.one("#hiddenPagesContainer");
-                    pagesContainer.set("innerHTML", "");
-                    //reset some variables used for pages building
-                    panelIterator = 0;
-                    decendancyLevel = 0;
-                    parentsArray = new Array();
-                    currentPage = 2; //perhaps some sophisticated behavior will be provided later to calculate approximate current page after resizing...
-                    buildPages(Y);
-                }, 1);
-            })
+                            //remove previously created pages
+                            var pagesContainer = Y.one("#hiddenPagesContainer");
+                            pagesContainer.set("innerHTML", "");
+                            //reset some variables used for pages building
+                            panelIterator = 0;
+                            decendancyLevel = 0;
+                            parentsArray = new Array();
+                            currentPage = 2; //perhaps some sophisticated behavior will be provided later to calculate approximate current page after resizing...
+                            buildPages(Y);
+                        }, 1);
+                    }, 1000);
+                }
+            } else {
+                Y.on("windowresize", function() {
+                    resizeReader(Y);
+                    setTimeout(function() {
+                        //make second resize to correct size of the book container to fit the screen size without scrollers
+                        resizeReader(Y);
+
+                        //remove previously created pages
+                        var pagesContainer = Y.one("#hiddenPagesContainer");
+                        pagesContainer.set("innerHTML", "");
+                        //reset some variables used for pages building
+                        panelIterator = 0;
+                        decendancyLevel = 0;
+                        parentsArray = new Array();
+                        currentPage = 2; //perhaps some sophisticated behavior will be provided later to calculate approximate current page after resizing...
+                        buildPages(Y);
+                    }, 1);
+                })
+            }
         });
+
+        function determineImagesSizes(Y) {
+            var source = Y.one("#column1");
+            var images = source.all("img");
+            if (images.size() == 0) {
+                imageLoaded = true;
+            } else {
+                for (var i = 0; i < images.size(); i ++) {
+                    var img = images.item(i);
+                    //todo: in code provide an onload even listener for each image to store it's size.
+                    //todo: here just get current size and store in js array
+                    var imgProp = {
+                        src: img.get("src"),
+                        w: img.get("offsetWidth"),
+                        h: img.get("offsetHeight")
+                    };
+                    imagesSizes[imagesSizes.length] = imgProp;
+                }
+                imageLoaded = true;
+            }
+        }
+
+        function getImageProps(src) {
+            for (var i = 0; i < imagesSizes.length; i ++) {
+                var prop = imagesSizes[i];
+                if (prop.src.toLowerCase() == src.toLowerCase()) {
+                    return prop;
+                }
+            }
+        }
 
         function registerHandlers(Y) {
             var lNav = Y.one("#leftNav");
@@ -150,39 +213,44 @@
         }
 
         function buildPages(Y) {
+            if (!imageLoaded) {
+                setTimeout(function() {
+                    buildPages(Y);
+                }, 50);
+                return;
+            }
+
             var inner = Y.one("#innerContentContainer");
             var panelHeight = inner.get("offsetHeight");
 
             var source = Y.one("#column1");
             var children = source.get("children");
-            //todo: start parsing children and put into dest column
+            var testPnl = createPanel(Y);
             if (children.size() > 0) {
 
-                var testPnl = createPanel(Y);
                 decendancyLevel ++;
                 fillPanel(Y, panelHeight, testPnl, testPnl, source);
                 decendancyLevel --;
 
                 showPages(Y);
             } else {
-                //put a content into column
-                console.debug("decendancyLevel: " + decendancyLevel);
+                handleTextImages(Y, testPnl, testPnl, source);
             }
         }
 
         function createPanel(Y) {
             var inner = Y.one("#innerContentContainer");
-            var panelHeight = inner.get("offsetHeight");
-            var panelWidth = parseInt((inner.get("offsetWidth") - 40) / 2);
+            _panelHeight = inner.get("offsetHeight");
+            _panelWidth = parseInt((inner.get("offsetWidth") - 40) / 2);
 
             var pnl = document.createElement("div");
             pnl = Y.one(pnl);
-            pnl.setStyle("width", panelWidth + "px");
-            pnl.setStyle("height", panelHeight + "px");
+            pnl.setStyle("width", _panelWidth + "px");
+            pnl.setStyle("height", _panelHeight + "px");
 //            pnl.setStyle("border", "1px solid black");
             pnl.setStyle("position", "absolute");
 
-            var left = panelIterator * panelWidth;
+            var left = panelIterator * _panelWidth;
             panelIterator ++;
 //            pnl.setStyle("left", left + "px"); //for visualization
 //            pnl.setStyle("top", "0px");
@@ -256,7 +324,7 @@
                             currentNode.appendChild(child);
                             if (rootParent.get("offsetHeight") > maxHeight) {
                                 currentNode.removeChild(child);
-                                if (child.hasChildNodes()) {
+                                if (child.get("children").size() > 0) {
                                     var container = child.cloneNode(false);
                                     currentNode.appendChild(container);
                                     decendancyLevel ++;
@@ -264,7 +332,6 @@
                                     rootParent = res[0];
                                     currentNode = res[1];
 
-                                    //todo: fill from parentsArray
                                     var rp = rootParent;
 
                                     for (var j = 0; j < parentsArray.length; j ++) {
@@ -275,12 +342,13 @@
                                     currentNode = rp;
                                     decendancyLevel --;
                                 } else {
-                                    console.debug("decendancyLevel: " + decendancyLevel + " imploement !!!!!!!!!!!!!!!!");
+                                    var res = handleTextImages(Y, rootParent, currentNode, child);
+                                    rootParent = res[0];
+                                    currentNode = res[1];
                                 }
                             }
                         } else {
                             if (childHeight < maxHeight) {
-                                //todo: create new panel and put child into
                                 rootParent = createPanel(Y);
                                 var rp = rootParent;
 
@@ -300,14 +368,13 @@
 
                                 currentNode.appendChild(child);
                             } else {
-                                if (child.hasChildNodes()) {
+                                if (child.get("children").size() > 0) {
                                     var container = child.cloneNode(false);
                                     currentNode.appendChild(container);
                                     decendancyLevel ++;
                                     var res = fillPanel(Y, maxHeight, rootParent, container, child);
                                     rootParent = res[0];
                                     currentNode = res[1];
-                                    //todo: fill from parentsArray
                                     var rp = rootParent;
 
                                     for (var j = 0; j < parentsArray.length; j ++) {
@@ -318,14 +385,15 @@
                                     currentNode = rp;
                                     decendancyLevel --;
                                 } else {
-                                    console.debug("decendancyLevel: " + decendancyLevel + " imploement !!!!!!!!!!!!!!!!");
+                                    var res = handleTextImages(Y, rootParent, currentNode, child);
+                                    rootParent = res[0];
+                                    currentNode = res[1];
                                 }
                             }
                         }
                     }
                 }
             } else {
-                //todo: operate with source object
                 rootParent = createPanel(Y);
                 var rp = rootParent;
 
@@ -340,9 +408,11 @@
                 currentNode.appendChild(source);
 
                 if (rootParent.get("offsetHeight") > maxHeight) {
-                    //todo: PROVIDE TEXT SPLITTING HERE
                     currentNode.removeChild(source);
-                    console.debug("decendancyLevel: " + decendancyLevel + " IMPLEMENT text splitting");
+
+                    var res = handleTextImages(Y, rootParent, currentNode, source);
+                    rootParent = res[0];
+                    currentNode = res[1];
                 }
 
             }
@@ -350,7 +420,157 @@
             return [rootParent, cn];
         }
 
+        function handleTextImages(Y, rootParent, currentNode, child) {
+            if (child.get("tagName").toLowerCase() == "img") {
+                return insertImage(Y, rootParent, currentNode, child);
+            } else {
+                return insertText(Y, rootParent, currentNode, child, child.get("innerHTML"));
+            }
+        }
 
+        function insertImage(Y, rootParent, currentNode, img) {
+            var props = getImageProps(img.get("src"));
+
+            var imgWidth = props.w;
+            var imgHeight = props.h;
+
+            img = img.cloneNode(true);
+
+            var pRatio = _panelHeight / _panelWidth;
+            var iRatio = imgHeight / imgWidth;
+
+            if (iRatio > pRatio) {
+                if (imgHeight > _panelHeight) {
+                    img.set("height", _panelHeight);
+                }
+            } else {
+                if (imgWidth > _panelWidth) {
+                    img.set("width", _panelWidth);
+                }
+            }
+
+            currentNode.appendChild(img);
+            if (rootParent.get("offsetHeight") > _panelHeight) {
+                currentNode.removeChild(img);
+                rootParent = createPanel(Y);
+
+                var rp = rootParent;
+
+                for (var j = 0; j < parentsArray.length; j ++) {
+                    var prnt = parentsArray[j].cloneNode(false);
+                    rp.appendChild(prnt);
+                    rp = prnt;
+                }
+                rootParent = rp;
+
+                if (currentNode.getAttribute("rootParent")) {
+                    currentNode = rp;
+                } else {
+                    currentNode = currentNode.cloneNode(false);
+                    rp.appendChild(currentNode);
+                }
+
+                currentNode.appendChild(img);
+            }
+            return [rootParent, currentNode];
+        }
+
+        function insertText(Y, rootParent, currentNode, child, sourceText) {
+            var pattern = /\s/g;
+
+            var textLen = sourceText.length;
+
+            var len = findAppropriateLength(Y, rootParent, currentNode, child, sourceText);
+
+            if (len == -1) {
+                //todo: start from new container
+                rootParent = createPanel(Y);
+                var rp = rootParent;
+
+                for (var j = 0; j < parentsArray.length; j ++) {
+                    var prnt = parentsArray[j].cloneNode(false);
+                    rp.appendChild(prnt);
+                    rp = prnt;
+                }
+                rootParent = rp;
+
+                if (currentNode.getAttribute("rootParent")) {
+                    currentNode = rp;
+                } else {
+                    currentNode = currentNode.cloneNode(false);
+                    rp.appendChild(currentNode);
+                }
+                len = findAppropriateLength(Y, rootParent, currentNode, child, sourceText);
+            }
+
+            //todo: after length found - normalize it till last whitespace occurence
+            var partText = sourceText.substring(0, len);
+            var actualLen = 0;
+            while (pattern.test(partText)) {
+                actualLen = pattern.lastIndex;
+            }
+            partText = sourceText.substring(0, actualLen - 1);
+            len = actualLen - 1;
+
+            var childClone = child.cloneNode(false);
+            childClone.set("innerHTML", partText);
+            currentNode.appendChild(childClone);
+
+            var textRemaining = sourceText.substring(len + 1);
+            if (textRemaining.length > 0) {
+                rootParent = createPanel(Y);
+                var rp = rootParent;
+
+                for (var j = 0; j < parentsArray.length; j ++) {
+                    var prnt = parentsArray[j].cloneNode(false);
+                    rp.appendChild(prnt);
+                    rp = prnt;
+                }
+                rootParent = rp;
+
+                if (currentNode.getAttribute("rootParent")) {
+                    currentNode = rp;
+                } else {
+                    currentNode = currentNode.cloneNode(false);
+                    rp.appendChild(currentNode);
+                }
+
+                //todo: try to append the rest to a page. if fits - get out. else - recursion
+
+                var childClone = child.cloneNode(false);
+                childClone.set("innerHTML", textRemaining);
+                currentNode.appendChild(childClone);
+
+                if (rootParent.get("offsetHeight") > _panelHeight) {
+                    currentNode.removeChild(childClone);
+                    return insertText(Y, rootParent, currentNode, child, textRemaining);
+                }
+            }
+
+            return [rootParent, currentNode];
+        }
+
+        function findAppropriateLength(Y, rootParent, currentNode, child, sourceText) {
+            var textLen = sourceText.length;
+
+            var partLen = parseInt(textLen * 0.99);
+            if (partLen < 100) {
+                return -1;
+            }
+            var childNode = child.cloneNode(false);
+            var partText = sourceText.substring(0, partLen);
+            childNode.set("innerHTML", partText);
+
+            currentNode.appendChild(childNode);
+            if (rootParent.get("offsetHeight") > _panelHeight) {
+                currentNode.removeChild(childNode);
+                return findAppropriateLength(Y, rootParent, currentNode, child, partText);
+            } else {
+                currentNode.removeChild(childNode);
+            }
+
+            return partLen;
+        }
 
         function resizeReader(Y) {
             var w = Y.one(window);
@@ -983,6 +1203,37 @@
 </div>
 <br style='page-break-after:always' />
 <div id="div3">
+    <img src="testImg.jpg">
+    <p style="border: 1px solid red;">a lot of text.... Since Google AdWords is so complex, this book is intended to be used in two ways. First, read it straight through to learn about the different strategies possible. After you have read it once, this book is intended to be a reference you can refer back to as you are optimizing your account. Each chapter ends with a Best Practices section that contains easy-to-comprehend points about the subject material to quickly refresh your memory.
+
+The last chapter of this book is a step-by-step guide to getting things done. Refer to that chapter when you are opening or optimizing accounts and follow along. If there is a step where you need more information, simply refer back to the chapter where that topic is covered in detail.
+
+By reading and then referring back to this book, implementing new AdWords strategies to optimize your account will save you time and money.
+
+    Chapter 1: Understanding Search Theory: Learn about the history of PPC advertising and the psychology of search.
+
+    Chapter 2: Keyword Research: How the buying funnel and your keywords work together. Control when your ad is displayed by using a combination of both positive and negative keywords.
+
+    Chapter 3: Keyword Tools: Extracting Valuable Data from Google: Learn how to combine Google's spiders with a dictionary to improve your keyword research. Learn how to use other Google and Microsoft free tools to improve your account.
+
+    Chapter 4: Writing Compelling Ads: From benefits to features to trademarks to unique selling propositions, learn to write ads that connect with the searcher.
+
+39
+
+    Chapter 5: Landing Pages That Convert Searchers into Buyers: Learn how to choose the best page on your site for every keyword. Then ensure the proper elements of usability, trust, and option control exist on the page to convert the searcher into a buyer.
+
+    Chapter 6: Advanced Optimization Techniques: Learn strategies for increasing conversion rates, click-through rate, traffic, and ad impressions.
+
+    Chapter 7: Demystifying Quality Score: Each quality score factor is torn apart, examined, and put back together so you can see exactly how your quality score is determined. Then learn strategies for managing and increasing quality scores.
+
+    Chapter 8: Beyond Text: Image, Video, and Mobile Ads: There is more to Google than text ads. Dive into the best uses of video, image, and mobile ads.
+
+    Chapter 9: Understanding the Content Network: The content network may be the most misunderstood and least optimized part of AdWords. Understand how the content network really works and how to start taking advantage of it.
+
+    Chapter 10: Advanced Content Network Techniques: The content network's reach is significantly larger than Google's search reach. The techniques you will learn in this chapter will help you find new customers who have never searched for your products.
+
+    Chapter 11: Advanced Geographic Targeting: Control exactly where your ad is shown. Understand the technology so you can avoid pitfalls and take advantage of displaying unique messages through location targeting. </p>
+
  <p align='center' height='36' width='0'><font size='6'><b>Praise for <span><i>Advanced Google AdWords</i></span></b></font></p>
  <div height='5'></div>
  <p align='justify' height='6' width='0'></p>
